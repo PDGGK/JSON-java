@@ -725,6 +725,82 @@ public class JSONMLTest {
     }
 
     /**
+     * Text entities are decoded once, just like attribute entities, in array form.
+     */
+    @Test
+    public void testToJSONArrayDecodesTextEntitiesOnce() {
+        final String[][] cases = {
+            {"&amp;lt;", "&lt;"},
+            {"&amp;amp;lt;", "&amp;lt;"},
+            {"&amp;#65;", "&#65;"},
+            {"&amp;#x1F642;", "&#x1F642;"}
+        };
+        for (String[] testCase : cases) {
+            final String xml = "<root><p title=\"" + testCase[0] + "\">"
+                    + testCase[0] + "</p></root>";
+            for (boolean keepStrings : new boolean[] {false, true}) {
+                final JSONArray result = JSONML.toJSONArray(xml, keepStrings);
+                final JSONArray child = result.getJSONArray(1);
+                assertEquals(testCase[1], child.getJSONObject(1).getString("title"));
+                assertEquals(testCase[1], child.getString(2));
+                assertEquals(xml, JSONML.toString(result));
+            }
+            assertTrue(JSONML.toJSONArray(xml, true).similar(
+                    JSONML.toJSONArray(xml, JSONMLParserConfiguration.KEEP_STRINGS)));
+        }
+    }
+
+    /**
+     * Text entities are decoded once in object form and survive an XML round trip.
+     */
+    @Test
+    public void testToJSONObjectDecodesTextEntitiesOnce() {
+        final String[][] cases = {
+            {"&amp;lt;", "&lt;"},
+            {"&amp;amp;lt;", "&amp;lt;"},
+            {"&amp;#65;", "&#65;"},
+            {"&amp;#x1F642;", "&#x1F642;"}
+        };
+        for (String[] testCase : cases) {
+            final String xml = "<root><p title=\"" + testCase[0] + "\">"
+                    + testCase[0] + "</p></root>";
+            for (boolean keepStrings : new boolean[] {false, true}) {
+                final JSONObject result = JSONML.toJSONObject(xml, keepStrings);
+                final JSONObject child = result.getJSONArray("childNodes").getJSONObject(0);
+                assertEquals(testCase[1], child.getString("title"));
+                assertEquals(testCase[1], child.getJSONArray("childNodes").getString(0));
+                assertEquals(xml, JSONML.toString(result));
+            }
+            assertTrue(JSONML.toJSONObject(xml, true).similar(
+                    JSONML.toJSONObject(xml, JSONMLParserConfiguration.KEEP_STRINGS)));
+        }
+    }
+
+    /**
+     * Keeping strings changes type conversion, not ordinary entity decoding.
+     */
+    @Test
+    public void testKeepStringsPreservesTypesAfterEntityDecoding() {
+        final String xml = "<p number=\"&#49;\">&#49;<b>&#116;rue</b><u>&#x1F642;</u></p>";
+        for (boolean keepStrings : new boolean[] {false, true}) {
+            final Object number = keepStrings ? "1" : Integer.valueOf(1);
+            final Object bool = keepStrings ? "true" : Boolean.TRUE;
+            final JSONArray array = JSONML.toJSONArray(xml, keepStrings);
+            assertEquals(number, array.getJSONObject(1).get("number"));
+            assertEquals(number, array.get(2));
+            assertEquals(bool, array.getJSONArray(3).get(1));
+            assertEquals("\uD83D\uDE42", array.getJSONArray(4).getString(1));
+
+            final JSONObject object = JSONML.toJSONObject(xml, keepStrings);
+            final JSONArray children = object.getJSONArray("childNodes");
+            assertEquals(number, object.get("number"));
+            assertEquals(number, children.get(0));
+            assertEquals(bool, children.getJSONObject(1).getJSONArray("childNodes").get(0));
+            assertEquals("\uD83D\uDE42", children.getJSONObject(2).getJSONArray("childNodes").getString(0));
+        }
+    }
+
+    /**
      * JSON string cannot be reverted to original xml when type guessing is used.
      * When we force all the values as string, the original text comes back.
      */
